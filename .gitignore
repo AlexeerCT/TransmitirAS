@@ -1,0 +1,46 @@
+# Ignorar archivos y directorios generados por PyInstaller
+/build/
+/dist/TransmitirAS.exe
+/dist/reload.exe
+
+# Ignorar archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+/src/__pycache__/
+
+# Ignorar archivos de configuración de entornos virtuales
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Ignorar archivos de configuración de IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Ignorar archivos de logs
+*.log
+
+# Ignorar archivos de configuración del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Ignorar archivos de configuración de Python
+/src/*.ini
+*.cfg
+
+# Ignorar archivos de configuración de PyInstaller
+*.toc
+*.pkg
+*.pyz
+*.zip
+*.pyd
+*.pyo
+*.dll
+*.so
+*.dylib

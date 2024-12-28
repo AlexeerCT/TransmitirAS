@@ -1,0 +1,4 @@
+pyodbc
+pysftp
+configparser
+zipfile36
