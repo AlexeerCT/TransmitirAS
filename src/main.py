@@ -107,24 +107,16 @@ class BackupService:
 
     def compress_backup(self, backup_file):
         zip_file = backup_file.replace('.bak', '.zip')
-        total_size = os.path.getsize(backup_file)
-        compressed_size = 0
-        last_logged_progress = 0
 
         try:
             with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                with open(backup_file, 'rb') as f:
-                    while True:
-                        chunk = f.read(1024 * 1024)  # Leer en bloques de 1MB
-                        if not chunk:
-                            break
-                        zipf.writestr(os.path.basename(backup_file), chunk)
-                        compressed_size += len(chunk)
-                        progress = (compressed_size / total_size) * 100
-                        if progress - last_logged_progress >= 10:  # Log cada 10%
-                            with open(self.log_file, "a") as log:
-                                log.write(f"{datetime.now()}: Compression progress: {progress:.2f}%\n")
-                            last_logged_progress = progress
+                # Comprimir el archivo completo como un único archivo dentro del ZIP
+                zipf.write(backup_file, os.path.basename(backup_file))
+            
+            # Log: Compresión completada
+            with open(self.log_file, "a") as log:
+                log.write(f"{datetime.now()}: Backup file compressed successfully into: {zip_file}\n")
+
         except Exception as e:
             self.log_error(f"Error during compression: {str(e)}")
             return None
