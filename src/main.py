@@ -29,6 +29,8 @@ class BackupService:
             self.log_error(f"Error loading config.ini: {str(e)}")
             raise
 
+        self.custom_backup = self.config.getboolean('Settings', 'custom_backup', fallback=False)
+
         # Abrir archivo de logs al inicio
         self.log_file = os.path.join(script_dir, "service_logs.log")
         try:
@@ -39,12 +41,25 @@ class BackupService:
             raise
 
     def log_error(self, message):
-        with open(self.log_file, "a") as log:
-            log.write(f"{datetime.now()}: ERROR: {message}\n")
+        if not self.is_duplicate_log(message):
+            with open(self.log_file, "a") as log:
+                log.write(f"{datetime.now()}: ERROR: {message}\n")
+
+    def is_duplicate_log(self, message):
+        today = datetime.now().strftime('%Y-%m-%d %H')
+        with open(self.log_file, "r") as log:
+            for line in log:
+                if today in line and message in line:
+                    return True
+        return False
+
+    def log_message(self, message):
+        if not self.is_duplicate_log(message):
+            with open(self.log_file, "a") as log:
+                log.write(f"{datetime.now()}: {message}\n")
 
     def backup_database(self):
-        with open(self.log_file, "a") as log:
-            log.write(f"{datetime.now()}: Loading config.ini.\n")
+        self.log_message("Loading config.ini.")
 
         # Cargar configuración de la base de datos
         try:
@@ -67,8 +82,7 @@ class BackupService:
         )
 
         # Log: Intentando realizar el respaldo
-        with open(self.log_file, "a") as log:
-            log.write(f"{datetime.now()}: Starting database backup for {database}.\n")
+        self.log_message(f"Starting database backup for {database}.")
 
         # Comando de respaldo para SQL Server
         conn_str = f"DRIVER={{SQL Server}};SERVER={server};UID={user};PWD={password}"
@@ -81,8 +95,7 @@ class BackupService:
                 cursor.execute("IF @@TRANCOUNT > 0 COMMIT")  # Commitear cualquier transacción pendiente
 
                 # Verificar si la conexión se ha establecido correctamente
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: Connected to SQL Server database '{database}'.\n")
+                self.log_message(f"Connected to SQL Server database '{database}'.")
 
                 # Realizar el comando de respaldo
                 backup_query = f"BACKUP DATABASE [{database}] TO DISK = '{backup_file}' WITH FORMAT"
@@ -93,11 +106,9 @@ class BackupService:
 
             # Después de ejecutar el comando de respaldo
             if os.path.isfile(backup_file):
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: Backup file successfully created: {backup_file}\n")
+                self.log_message(f"Backup file successfully created: {backup_file}")
             else:
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: Backup file was not created: {backup_file}\n")
+                self.log_message(f"Backup file was not created: {backup_file}")
 
         except Exception as e:
             self.log_error(f"Error during backup: {str(e)}")
@@ -114,8 +125,7 @@ class BackupService:
                 zipf.write(backup_file, os.path.basename(backup_file))
             
             # Log: Compresión completada
-            with open(self.log_file, "a") as log:
-                log.write(f"{datetime.now()}: Backup file compressed successfully into: {zip_file}\n")
+            self.log_message(f"Backup file compressed successfully into: {zip_file}")
 
         except Exception as e:
             self.log_error(f"Error during compression: {str(e)}")
@@ -135,13 +145,11 @@ class BackupService:
             return
 
         # Log: Intentando conectar al SFTP
-        with open(self.log_file, "a") as log:
-            log.write(f"{datetime.now()}: Connecting to SFTP server {sftp_host}...\n")
+        self.log_message(f"Connecting to SFTP server {sftp_host}...")
 
         # Validar si el archivo existe antes de intentar cargarlo
         if not os.path.isfile(file_path):
-            with open(self.log_file, "a") as log:
-                log.write(f"{datetime.now()}: File not found: {file_path}\n")
+            self.log_message(f"File not found: {file_path}")
             return
 
         # Conectar al servidor SFTP y cargar el archivo
@@ -151,8 +159,7 @@ class BackupService:
 
             with pysftp.Connection(sftp_host, username=sftp_username, password=sftp_password, port=sftp_port, cnopts=cnopts) as sftp:
                 file_size = os.path.getsize(file_path)
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: Starting upload of {file_path} ({file_size} bytes).\n")
+                self.log_message(f"Starting upload of {file_path} ({file_size} bytes).")
 
                 last_logged_progress = 0
 
@@ -160,20 +167,17 @@ class BackupService:
                     nonlocal last_logged_progress
                     progress = (transferred / total) * 100
                     if progress - last_logged_progress >= 10:  # Log cada 10%
-                        with open(self.log_file, "a") as log:
-                            log.write(f"{datetime.now()}: Upload progress: {progress:.2f}%\n")
+                        self.log_message(f"Upload progress: {progress:.2f}%")
                         last_logged_progress = progress
 
                 remote_path = os.path.basename(file_path)  # Subir con el mismo nombre
                 sftp.put(file_path, remote_path, callback=progress_callback)  # Subir el archivo al servidor SFTP
 
                 # Log: Archivo subido exitosamente
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: File {file_path} uploaded to SFTP as {remote_path}.\n")
+                self.log_message(f"File {file_path} uploaded to SFTP as {remote_path}.")
 
                 # Log de desconexión
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: SFTP connection closed.\n")
+                self.log_message("SFTP connection closed.")
 
         except pysftp.ConnectionException as e:
             self.log_error(f"SFTP connection error: {str(e)}")
@@ -183,8 +187,7 @@ class BackupService:
             self.log_error(f"Error during SFTP upload: {str(e)}")
 
     def main(self):
-        with open(self.log_file, "a") as log:
-            log.write(f"{datetime.now()}: Starting main cycle.\n")
+        self.log_message("Starting main cycle.")
 
         backup_time_str = self.config['Settings']['backup_time']
 
@@ -202,43 +205,77 @@ class BackupService:
                     if self.last_backup_date != now.date():                       
 
                         # Log: Iniciar proceso de respaldo
-                        with open(self.log_file, "a") as log:
-                            log.write(f"{datetime.now()}: Starting backup and upload cycle.\n")
+                        self.log_message("Starting backup and upload cycle.")
 
-                        # Realizar el respaldo
-                        backup_file = self.backup_database()
-                        if backup_file is None:
-                            continue
+                        if self.custom_backup:
+                            # Log: Custom backup enabled
+                            self.log_message("Custom backup enabled. Using existing backup file.")
 
-                        # Comprimir el archivo de respaldo
-                        zip_file = self.compress_backup(backup_file)
-                        if zip_file is None:
-                            continue
+                            # Use the existing backup file
+                            backup_folder = self.config['Settings']['backup_folder']
+                            current_year = str(datetime.now().year)
+                            current_month = f"{datetime.now().month:02d}"
+                            current_day = f"{datetime.now().day:02d}"
 
-                        # Subir el archivo comprimido al SFTP
-                        self.upload_to_sftp(zip_file)
-                        
-                        # Eliminar los archivos locales después de subirlos
-                        if os.path.isfile(backup_file):
-                            os.remove(backup_file)
-                            with open(self.log_file, "a") as log:
-                                log.write(f"{datetime.now()}: Local backup file {backup_file} removed.\n")
-                        
-                        if os.path.isfile(zip_file):
-                            os.remove(zip_file)
-                            with open(self.log_file, "a") as log:
-                                log.write(f"{datetime.now()}: Local zip file {zip_file} removed.\n")
+                            # Filtrar los archivos que contienen el año, mes, día y "SCAIIPRD"
+                            filtered_files = [
+                                os.path.join(backup_folder, file) for file in os.listdir(backup_folder)
+                                if file.endswith('.bak') and current_year in file and current_month in file and current_day in file and self.config['Database']['database'] in file
+                            ]
+                            # Obtener el archivo más reciente de los archivos filtrados
+                            if filtered_files:
+                                backup_file = max(filtered_files, key=os.path.getctime)
+                            else:
+                                backup_file = None
 
-                        # Log: Respaldo completado y archivos eliminados localmente
-                        with open(self.log_file, "a") as log:
-                            log.write(f"{datetime.now()}: Backup and upload completed. Local files removed.\n")
+                            # Log: Archivo de respaldo seleccionado
+                            if backup_file:
+                                self.log_message(f"Selected backup file: {backup_file}")
+                            else:
+                                self.log_message(f"No backup file found matching the criteria: {self.config['Database']['database']}_{current_year}_{current_month}_{current_day}.")
+                                
+                            # Compress the existing backup file
+                            zip_file = self.compress_backup(backup_file)
+                            if zip_file is None:
+                                continue
 
-                        # Actualizar la fecha del último respaldo
-                        self.last_backup_date = now.date()
+                            # Upload the compressed file to SFTP
+                            self.upload_to_sftp(zip_file)
+
+                            # Log: Custom backup process completed
+                            self.log_message("Custom backup and upload completed.")
+
+                        else:
+                            # Realizar el respaldo
+                            backup_file = self.backup_database()
+                            if backup_file is None:
+                                continue
+
+                            # Comprimir el archivo de respaldo
+                            zip_file = self.compress_backup(backup_file)
+                            if zip_file is None:
+                                continue
+
+                            # Subir el archivo comprimido al SFTP
+                            self.upload_to_sftp(zip_file)
+                            
+                            # Eliminar los archivos locales después de subirlos
+                            if os.path.isfile(backup_file):
+                                os.remove(backup_file)
+                                self.log_message(f"Local backup file {backup_file} removed.")
+                            
+                            if os.path.isfile(zip_file):
+                                os.remove(zip_file)
+                                self.log_message(f"Local zip file {zip_file} removed.")
+
+                            # Log: Respaldo completado y archivos eliminados localmente
+                            self.log_message("Backup and upload completed. Local files removed.")
+
+                            # Actualizar la fecha del último respaldo
+                            self.last_backup_date = now.date()
                  # Esperar hasta la hora del próximo respaldo
                 sleep_time = (next_backup - now).total_seconds()
-                with open(self.log_file, "a") as log:
-                    log.write(f"{datetime.now()}: Sleeping until next backup at {next_backup}.\n")
+                self.log_message(f"Sleeping until next backup at {next_backup}.")
                         
                 # Esperar con chequeos periódicos para permitir la detención del servicio
                 while sleep_time > 0 and self.running:
