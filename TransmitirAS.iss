@@ -1,7 +1,7 @@
 [Setup]
 AppName=TransmitirAS
 AppVersion=1.0
-DefaultDirName={pf}\TransmitirAS
+DefaultDirName={sd}\AduanaSoft\TransmitirAS
 OutputDir=.
 OutputBaseFilename=TransmitirAS_Installer
 DefaultGroupName=TransmitirAS
@@ -192,6 +192,7 @@ begin
   CustomBackupCheckBox := TCheckBox.Create(BackupPage);
   CustomBackupCheckBox.Caption := 'Respaldo Personalizado';
   CustomBackupCheckBox.Top := BackupTimeEdit.Top + ScaleY(32);
+  CustomBackupCheckBox.Width := BackupPage.SurfaceWidth - ScaleX(32); // Adjust width
   CustomBackupCheckBox.Parent := BackupPage.Surface;
 end;
 

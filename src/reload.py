@@ -1,6 +1,13 @@
 import win32serviceutil
+import ctypes, sys
 
 SERVICE_NAME = "TransmitirAS"
+
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
 
 def restart_service(service_name):
     try:
@@ -37,6 +44,11 @@ def start_service(service_name):
         print(f"Error al iniciar el servicio {service_name}: {e}")
 
 if __name__ == "__main__":
+    if not is_admin():
+        print("Este script necesita permisos de administrador para ejecutarse.")
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
+        sys.exit()
+
     print("Seleccione una opción:")
     print("1. Reiniciar servicio")
     print("2. Detener servicio")

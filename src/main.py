@@ -282,6 +282,10 @@ class BackupService:
                                 # Subir el archivo comprimido al SFTP
                                 self.upload_to_sftp(zip_file, database)
 
+                                if os.path.isfile(zip_file):
+                                    os.remove(zip_file)
+                                    self.log_message(f"Local zip file {zip_file} removed.")
+
                                 # Log: Custom backup process completed
                                 self.log_message(f"Custom backup and upload completed for {database}.")
 
