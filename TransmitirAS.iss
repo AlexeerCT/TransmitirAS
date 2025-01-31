@@ -225,7 +225,7 @@ begin
       DatabaseEdits[i] := DatabaseEdit;
 
       UserLabel := TLabel.Create(DatabasePage);
-      UserLabel.Caption := 'Usuario:';
+      UserLabel.Caption := 'Nodo ' + IntToStr(i + 1) + ':';
       UserLabel.Top := DatabaseEdit.Top + ScaleY(32);
       UserLabel.Parent := DatabasePage.Surface;
 
@@ -236,7 +236,7 @@ begin
       SFTPUserEdits[i] := UserEdit;
 
       PasswordLabel := TLabel.Create(DatabasePage);
-      PasswordLabel.Caption := 'Contraseña:';
+      PasswordLabel.Caption := 'Contraseña ' + IntToStr(i + 1) + ':';
       PasswordLabel.Top := UserEdit.Top + ScaleY(32);
       PasswordLabel.Parent := DatabasePage.Surface;
 
