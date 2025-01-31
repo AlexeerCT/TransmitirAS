@@ -44,3 +44,6 @@ Thumbs.db
 *.dll
 *.so
 *.dylib
+
+# Ignorar el instalador de TransmitirAS
+TransmitirAS_Installer.exe
