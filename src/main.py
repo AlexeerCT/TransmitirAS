@@ -6,6 +6,7 @@ import pysftp
 import configparser
 import zipfile
 import logging
+import subprocess
 from datetime import datetime, timedelta
 
 class BackupService:
@@ -27,6 +28,8 @@ class BackupService:
         self.load_config(config_path)
 
         self.custom_backup = self.config.getboolean('Settings', 'custom_backup', fallback=False)
+        self.split_zip = self.config.getboolean('Settings', 'split_zip', fallback=False)
+        self.seven_zip_path = os.path.abspath(os.path.join(script_dir, "utils\\7-Zip\\7z.exe"))  
 
         # Crear directorios de logs si no existen
         log_dir = os.path.join(script_dir, 'logs')
@@ -36,6 +39,9 @@ class BackupService:
 
         # Configurar logging
         self.setup_logging(service_log_dir, error_log_dir)
+
+        if self.split_zip:
+            self.check_7zip_installed()
 
     def load_config(self, config_path):
         try:
@@ -171,17 +177,45 @@ class BackupService:
 
         return backup_file
 
+    def check_7zip_installed(self):
+        try:
+            result = subprocess.run([self.seven_zip_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode != 0:
+                raise FileNotFoundError("7-Zip command failed to execute.")
+        except FileNotFoundError:
+            self.log_error("7-Zip is not installed or not found in PATH.")
+            raise RuntimeError("7-Zip is required for splitting zip files but is not installed or not found in PATH.")
+
     def compress_backup(self, backup_file):
         zip_file = backup_file.replace('.bak', '.zip')
 
         try:
             with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Comprimir el archivo completo como un único archivo dentro del ZIP
                 zipf.write(backup_file, os.path.basename(backup_file))
-            
-            # Log: Compresión completada
-            self.log_message(f"Backup file compressed successfully into: {zip_file}")
+                self.log_message(f"Backup file compressed successfully into: {zip_file}")
 
+            if self.split_zip:
+                backup_file_size = os.path.getsize(zip_file)
+
+                if os.path.isfile(zip_file):
+                    os.remove(zip_file)
+                    self.log_message(f"Local zip file {zip_file} removed.")
+
+                # Calculate the size for each part                
+                part_size = backup_file_size // 5  # Divide by 5 to get the size for each part
+
+                # Use 7-zip to create a new archive and split it into 5 parts
+                split_command = [
+                    self.seven_zip_path, 'a', f'-v{part_size}b', zip_file, backup_file
+                ]
+                subprocess.run(split_command, check=True)
+                self.log_message(f"Backup file split into parts successfully: {zip_file}")
+
+        except FileNotFoundError:
+            self.log_error("7-Zip is not installed or not found in PATH.")
+        except subprocess.CalledProcessError as e:
+            self.log_error(f"Error during compression: {str(e)}")
+            return None
         except Exception as e:
             self.log_error(f"Error during compression: {str(e)}")
             return None
@@ -205,34 +239,41 @@ class BackupService:
         # Log: Intentando conectar al SFTP
         self.log_message(f"Connecting to SFTP server {sftp_host}...")
 
-        # Validar si el archivo existe antes de intentar cargarlo
-        if not os.path.isfile(file_path):
-            self.log_message(f"File not found: {file_path}")
-            return
-
         # Conectar al servidor SFTP y cargar el archivo
         try:
             cnopts = pysftp.CnOpts()
             cnopts.hostkeys = None  # Deshabilitar la validación de hostkeys (no recomendado para producción)
 
             with pysftp.Connection(sftp_host, username=sftp_username, password=sftp_password, port=sftp_port, cnopts=cnopts) as sftp:
-                file_size = os.path.getsize(file_path)
-                self.log_message(f"Starting upload of {file_path} ({file_size} bytes).")
+                if self.split_zip:
+                    # Upload all parts
+                    part_files = [f for f in os.listdir(os.path.dirname(file_path)) if f.startswith(os.path.basename(file_path))]
+                    for part_file in part_files:                                                 
+                        part_path = os.path.join(os.path.dirname(file_path), part_file)
 
-                last_logged_progress = 0
+                        # Validar si el archivo existe antes de intentar cargarlo
+                        if not os.path.isfile(part_path):
+                            self.log_message(f"File not found: {part_path}")
+                            return
 
-                def progress_callback(transferred, total):
-                    nonlocal last_logged_progress
-                    progress = (transferred / total) * 100
-                    if progress - last_logged_progress >= 10:  # Log cada 10%
-                        self.log_message(f"Upload progress: {progress:.2f}%")
-                        last_logged_progress = progress
+                        file_size = os.path.getsize(part_path)
+                        self.log_message(f"Starting upload of {part_path} ({file_size} bytes).")
+                        sftp.put(part_path, part_file)
+                        self.log_message(f"File {part_path} uploaded to SFTP as {part_file}.")
 
-                remote_path = os.path.basename(file_path)  # Subir con el mismo nombre
-                sftp.put(file_path, remote_path, callback=progress_callback)  # Subir el archivo al servidor SFTP
+                        if os.path.isfile(part_path):
+                            os.remove(part_path)
+                            self.log_message(f"{part_file} removed.")
+                else:
+                    # Validar si el archivo existe antes de intentar cargarlo
+                    if not os.path.isfile(file_path):
+                        self.log_message(f"File not found: {file_path}")
+                        return
 
-                # Log: Archivo subido exitosamente
-                self.log_message(f"File {file_path} uploaded to SFTP as {remote_path}.")
+                    file_size = os.path.getsize(file_path)
+                    self.log_message(f"Starting upload of {file_path} ({file_size} bytes).")
+                    sftp.put(file_path, os.path.basename(file_path))
+                    self.log_message(f"File {file_path} uploaded to SFTP as {os.path.basename(file_path)}.")
 
                 # Log de desconexión
                 self.log_message("SFTP connection closed.")
@@ -280,6 +321,7 @@ class BackupService:
                                     continue
 
                                 # Subir el archivo comprimido al SFTP
+                                
                                 self.upload_to_sftp(zip_file, database)
 
                                 if os.path.isfile(zip_file):

@@ -11,6 +11,7 @@ PrivilegesRequired=admin
 Source: "dist\TransmitirAS.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\reload.exe"; DestDir: "{app}\utils"; Flags: ignoreversion
 Source: "dist\nssm.exe"; DestDir: "{app}\utils"; Flags: ignoreversion
+Source: "dist\7z.exe"; DestDir: "{app}\utils"; Flags: ignoreversion
 
 [Run]
 Filename: "{app}\utils\nssm.exe"; Parameters: "install TransmitirAS ""{app}\TransmitirAS.exe"""; Flags: runhidden waituntilterminated
@@ -33,7 +34,7 @@ var
   DBPage, BackupPage, SFTPPage, DBCountPage: TWizardPage;
   ServerEdit, UserEdit, PasswordEdit: TEdit;
   BackupFolderEdit, BackupTimeEdit: TEdit;
-  CustomBackupCheckBox: TCheckBox;
+  CustomBackupCheckBox, SplitZipCheckBox: TCheckBox; // Added SplitZipCheckBox
   SFTPHostEdit, SFTPPortEdit: TEdit;
   DatabaseEdits, SFTPUserEdits, SFTPPasswordEdits: array of TEdit;
   BackupFolderButton: TButton;
@@ -194,6 +195,12 @@ begin
   CustomBackupCheckBox.Top := BackupTimeEdit.Top + ScaleY(32);
   CustomBackupCheckBox.Width := BackupPage.SurfaceWidth - ScaleX(32); // Adjust width
   CustomBackupCheckBox.Parent := BackupPage.Surface;
+
+  SplitZipCheckBox := TCheckBox.Create(BackupPage); // Added SplitZipCheckBox
+  SplitZipCheckBox.Caption := 'Dividir en ZIP';
+  SplitZipCheckBox.Top := CustomBackupCheckBox.Top + ScaleY(32);
+  SplitZipCheckBox.Width := BackupPage.SurfaceWidth - ScaleX(32);
+  SplitZipCheckBox.Parent := BackupPage.Surface;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -265,6 +272,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigContent: string;
   i: Integer;
+  ResultCode: Integer; 
 begin
   if CurStep = ssPostInstall then
   begin
@@ -285,6 +293,7 @@ begin
       'backup_folder=' + BackupFolderEdit.Text + #13#10 +
       'backup_time=' + BackupTimeEdit.Text + #13#10 +
       'custom_backup=' + BoolToString(CustomBackupCheckBox.Checked) + #13#10 +
+      'split_zip=' + BoolToString(SplitZipCheckBox.Checked) + #13#10 + 
       '[SFTP]'#13#10 +
       'host=' + SFTPHostEdit.Text + #13#10 +
       'port=' + SFTPPortEdit.Text + #13#10;
@@ -297,6 +306,11 @@ begin
     end;
 
     SaveStringToFile(ExpandConstant('{app}\config.ini'), ConfigContent, False);
+
+    if SplitZipCheckBox.Checked then
+    begin
+       Exec(ExpandConstant('{app}\utils\7z.exe'), '/S /D="' + ExpandConstant('{app}') + '\utils\7-Zip"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)      
+    end;
   end;
 end;
 
